@@ -124,10 +124,13 @@ function InputSlider({ label, unit, value, min, max, step, onChange, hint }) {
   const formatted = value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
   return (
     <div className="mb-7">
-      <div className="flex items-end justify-between mb-2">
-        <label className="text-[15px] font-semibold text-brand-900 leading-snug">
+      <div className="flex items-end justify-between mb-2 gap-3">
+        <label className="text-[15px] font-semibold text-brand-900 leading-snug whitespace-nowrap shrink-0">
           {label}
         </label>
+        {hint && (
+          <span className="min-w-0 flex-1 text-xs text-slate-400 leading-relaxed text-right">{hint}</span>
+        )}
       </div>
       <div className="flex items-center gap-3 mb-2">
         <input
@@ -155,7 +158,6 @@ function InputSlider({ label, unit, value, min, max, step, onChange, hint }) {
         step={step}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
-      {hint && <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">{hint}</p>}
     </div>
   );
 }
