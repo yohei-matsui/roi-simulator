@@ -436,13 +436,9 @@ function RoiSimulator() {
             />
             <KpiCard
               label="必要月間再生回数"
-              value={targetViews}
+              value={autoTargetViews}
               unit="回 / 月"
-              sub={
-                viewsManual
-                  ? "個別設定モードで入力した値です"
-                  : `転換率 ${listRate}% で ${fmt1(requiredLists)}件 リスト獲得するために必要`
-              }
+              sub={`転換率 ${listRate}% で ${fmt1(requiredLists)}件 リスト獲得するために必要`}
             />
           </div>
 
