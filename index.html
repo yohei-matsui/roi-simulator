@@ -435,7 +435,7 @@ function RoiSimulator() {
               sub={`成約率 ${closeRate}% で ${fmt1(breakEvenDeals)}件 成約するために必要`}
             />
             <KpiCard
-              label="必要月間再生回数"
+              label="目標月間再生回数"
               value={autoTargetViews}
               unit="回 / 月"
               sub={`転換率 ${listRate}% で ${fmt1(requiredLists)}件 リスト獲得するために必要`}
@@ -449,11 +449,11 @@ function RoiSimulator() {
               <h2 className="text-lg font-bold">契約期間（{termMonths}ヶ月）の成長ロードマップ</h2>
             </div>
             <div className="flex items-center gap-3 rounded-full border border-brand-100 bg-white px-4 py-2 shadow-sm">
-              <span className="text-sm font-semibold text-brand-900 whitespace-nowrap">個別設定モード</span>
+              <span className="text-sm font-semibold text-brand-900 whitespace-nowrap">目標設定モード</span>
               <ToggleSwitch checked={viewsManual} onChange={handleToggleViewsManual} />
               {viewsManual && (
                 <div className="flex items-center gap-1.5 border-l border-brand-100 pl-3">
-                  <span className="text-xs text-slate-500 whitespace-nowrap">必要月間再生回数</span>
+                  <span className="text-xs text-slate-500 whitespace-nowrap">目標月間再生回数</span>
                   <ManualViewsInput value={manualViews} onChange={setManualViews} />
                   <span className="text-xs text-slate-500 whitespace-nowrap">回 / 月</span>
                 </div>
@@ -478,7 +478,7 @@ function RoiSimulator() {
                     >
                       累計ストック
                     </ThInfo>
-                    <ThInfo tip="累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「必要月間再生回数」へちょうど到達するよう計算しています。">
+                    <ThInfo tip="累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「目標月間再生回数」へちょうど到達するよう計算しています。">
                       予測 月間再生数
                     </ThInfo>
                     <ThInfo tip="予測月間再生数 ×（公式LINEリストイン転換率 ÷ 100）で算出した、公式LINEへの登録数の予測値です。">
