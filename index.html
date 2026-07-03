@@ -423,9 +423,6 @@ function RoiSimulator() {
                     <ThInfo tip="予測リストイン数 ×（商談成約率 ÷ 100）で算出した、バックエンド商材の成約数の予測値です。">
                       予測 成約数
                     </ThInfo>
-                    <ThInfo sub="成約数 × サービス単価" tip="予測成約数 × お客様サービス単価で算出した、その月の予測売上です。">
-                      予測 売上
-                    </ThInfo>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,11 +456,6 @@ function RoiSimulator() {
                         </td>
                         <td className="px-5 py-4 text-right text-lg">
                           <AnimatedCell value={r.deals} decimals={2} highlight={cleared} /> 件
-                        </td>
-                        <td className="px-5 py-4 text-right text-lg">
-                          <span className={cleared ? "font-bold text-brand-900" : ""}>
-                            <AnimatedCell value={r.revenue} /> 円
-                          </span>
                         </td>
                       </tr>
                     );
