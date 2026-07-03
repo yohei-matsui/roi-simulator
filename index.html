@@ -268,7 +268,8 @@ function RoiSimulator() {
     const deals = lists * (closeRate / 100);
     const revenue = deals * price;
     const profit = revenue - fee;
-    return { m, posts, stock, views, lists, deals, revenue, profit };
+    const cumulativeFee = fee * m;
+    return { m, posts, stock, views, lists, deals, revenue, profit, cumulativeFee };
   });
 
   const breakEvenMonth = months.find((r) => r.deals >= breakEvenDeals && breakEvenDeals > 0);
@@ -430,6 +431,9 @@ function RoiSimulator() {
                     <ThInfo tip="予測リストイン数 ×（商談成約率 ÷ 100）で算出した、バックエンド商材の成約数の予測値です。">
                       予測 成約数
                     </ThInfo>
+                    <ThInfo tip="運用代行プラン月額費用 × 経過月数で算出した、契約開始からその月までの発注金額の累計です。">
+                      累計発注金額
+                    </ThInfo>
                   </tr>
                 </thead>
                 <tbody>
@@ -463,6 +467,9 @@ function RoiSimulator() {
                         </td>
                         <td className="px-5 py-4 text-right text-lg">
                           <AnimatedCell value={r.deals} decimals={2} highlight={cleared} /> 件
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg tabular-nums text-slate-500">
+                          <AnimatedCell value={r.cumulativeFee} /> 円
                         </td>
                       </tr>
                     );
