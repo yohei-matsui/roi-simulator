@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YouTube運用 ROIシミュレーター</title>
+<link rel="icon" type="image/png" href="./logo.png" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            50: "#fdf4f4",
+            100: "#fbe7e8",
+            200: "#f5c9cc",
+            300: "#eda0a5",
+            400: "#e26b73",
+            500: "#d64550",
+            600: "#cb2a36",
+            700: "#b0111d",
+            800: "#a01019",
+            900: "#c0000d",
+            950: "#a2000b",
+          },
+        },
+        fontFamily: {
+          sans: ['"Hiragino Sans"', '"Hiragino Kaku Gothic ProN"', '"Noto Sans JP"', 'Meiryo', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, #c0000d var(--fill, 50%), #f5c9cc var(--fill, 50%));
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #ffffff;
+    border: 3px solid #c0000d;
+    box-shadow: 0 2px 6px rgba(162, 0, 11, 0.25);
+    transition: transform 0.15s ease;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #ffffff;
+    border: 3px solid #c0000d;
+    box-shadow: 0 2px 6px rgba(162, 0, 11, 0.25);
+  }
+  .num-transition { transition: color 0.3s ease; }
+</style>
+</head>
+<body class="bg-brand-50">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* ---------- 数値アニメーションフック ---------- */
+function useAnimatedNumber(target, duration = 450) {
+  const [display, setDisplay] = useState(target);
+  const fromRef = useRef(target);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      const val = from + (target - from) * eased;
+      setDisplay(val);
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+      }
+    };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+    // 非表示タブ等でrAFが止まっても最終値を保証する
+    const safety = setTimeout(() => {
+      fromRef.current = target;
+      setDisplay(target);
+    }, duration + 100);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      clearTimeout(safety);
+    };
+  }, [target, duration]);
+
+  return display;
+}
+
+/* ---------- 表示フォーマッタ ---------- */
+const fmtInt = (n) => Math.round(n).toLocaleString("ja-JP");
+const fmt1 = (n) =>
+  n.toLocaleString("ja-JP", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/* ---------- 入力スライダー ---------- */
+function InputSlider({ label, unit, value, min, max, step, onChange, hint }) {
+  const fill = ((value - min) / (max - min)) * 100;
+  // フォーカス中は編集用の生文字列、非フォーカス時はカンマ付き表示
+  const [editing, setEditing] = useState(null);
+  const formatted = value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  return (
+    <div className="mb-7">
+      <div className="flex items-end justify-between mb-2">
+        <label className="text-[15px] font-semibold text-brand-900 leading-snug">
+          {label}
+        </label>
+      </div>
+      <div className="flex items-center gap-3 mb-2">
+        <input
+          type="text"
+          inputMode="decimal"
+          className="w-40 rounded-lg border border-brand-200 bg-white px-3 py-2 text-right text-2xl font-bold text-brand-900 focus:border-brand-600 focus:ring-2 focus:ring-brand-200 focus:outline-none"
+          value={editing !== null ? editing : formatted}
+          onFocus={() => setEditing(String(value))}
+          onBlur={() => setEditing(null)}
+          onChange={(e) => {
+            setEditing(e.target.value);
+            const v = parseFloat(e.target.value.replace(/,/g, ""));
+            if (!isNaN(v)) onChange(v);
+          }}
+        />
+        <span className="text-sm text-slate-500 font-medium whitespace-nowrap">{unit}</span>
+      </div>
+      <input
+        type="range"
+        className="w-full"
+        style={{ "--fill": fill + "%" }}
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
+      {hint && <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">{hint}</p>}
+    </div>
+  );
+}
+
+/* ---------- テーブル見出し（ホバーで説明） ---------- */
+function ThInfo({ children, tip, align = "right", sub }) {
+  return (
+    <th
+      className={
+        "px-5 py-4 font-semibold whitespace-nowrap relative group " +
+        (align === "left" ? "text-left" : "text-right")
+      }
+    >
+      <span className="cursor-help border-b border-dashed border-white/40 pb-0.5">
+        {children}
+      </span>
+      {sub && <span className="block text-[11px] font-normal text-brand-300 mt-0.5">{sub}</span>}
+      <div
+        className={
+          "pointer-events-none absolute z-20 top-full mt-2 w-72 whitespace-normal rounded-xl border border-brand-100 bg-white p-3 text-left text-xs font-normal leading-relaxed text-slate-600 shadow-xl opacity-0 invisible transition-opacity duration-150 group-hover:opacity-100 group-hover:visible " +
+          (align === "left" ? "left-0" : "right-0")
+        }
+      >
+        {tip}
+      </div>
+    </th>
+  );
+}
+
+/* ---------- KPIカード ---------- */
+function KpiCard({ label, value, unit, sub, accent }) {
+  const animated = useAnimatedNumber(value);
+  const isDecimal = value < 100;
+  return (
+    <div
+      className={
+        "rounded-2xl p-7 shadow-sm border transition-shadow hover:shadow-md " +
+        (accent
+          ? "bg-brand-900 border-brand-900 text-white"
+          : "bg-white border-brand-100 text-brand-900")
+      }
+    >
+      <p className={"text-sm font-semibold tracking-wide mb-3 " + (accent ? "text-brand-200" : "text-slate-500")}>
+        {label}
+      </p>
+      <p className="num-transition flex items-baseline gap-1.5">
+        <span className="text-[56px] leading-none font-bold tabular-nums">
+          {isDecimal ? fmt1(animated) : fmtInt(animated)}
+        </span>
+        <span className={"text-xl font-semibold " + (accent ? "text-brand-200" : "text-slate-500")}>
+          {unit}
+        </span>
+      </p>
+      {sub && (
+        <p className={"mt-3 text-sm leading-relaxed " + (accent ? "text-brand-300" : "text-slate-400")}>
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------- アニメーション付きテーブルセル ---------- */
+function AnimatedCell({ value, decimals = 0, highlight }) {
+  const animated = useAnimatedNumber(value);
+  return (
+    <span className={"tabular-nums " + (highlight ? "font-bold text-brand-900" : "")}>
+      {decimals > 0
+        ? animated.toLocaleString("ja-JP", {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+          })
+        : fmtInt(animated)}
+    </span>
+  );
+}
+
+/* ---------- メインコンポーネント ---------- */
+function RoiSimulator() {
+  const [fee, setFee] = useState(200000);        // 運用代行プラン月額費用
+  const [price, setPrice] = useState(500000);    // お客様サービス単価
+  const [closeRate, setCloseRate] = useState(20);   // 商談成約率 %
+  const [listRate, setListRate] = useState(0.2);    // リストイン転換率 %
+  const [posts, setPosts] = useState(4);            // 月間投稿本数
+  const [termMonths, setTermMonths] = useState(6);  // 契約期間（ヶ月）
+
+  /* --- 計算ロジック --- */
+  const breakEvenDeals = price > 0 ? fee / price : 0;                       // 必要月間成約数
+  const requiredLists = closeRate > 0 ? breakEvenDeals / (closeRate / 100) : 0; // 必要月間リスト数
+  const targetViews = listRate > 0 ? requiredLists / (listRate / 100) : 0;      // 目標月間再生数
+
+  /* --- 契約期間ロードマップ ---
+     目標再生数を契約最終月に達成する複利成長カーブ:
+     予測再生数 = 目標 × (累計ストック / (投稿数×契約月数))^1.5  */
+  const months = Array.from({ length: termMonths }, (_, i) => {
+    const m = i + 1;
+    const stock = posts * m;
+    const ratio = posts > 0 ? stock / (posts * termMonths) : 0;
+    const views = targetViews * Math.pow(ratio, 1.5);
+    const lists = views * (listRate / 100);
+    const deals = lists * (closeRate / 100);
+    const revenue = deals * price;
+    const profit = revenue - fee;
+    return { m, posts, stock, views, lists, deals, revenue, profit };
+  });
+
+  const breakEvenMonth = months.find((r) => r.deals >= breakEvenDeals && breakEvenDeals > 0);
+
+  return (
+    <div className="min-h-screen font-sans text-gray-800">
+      {/* ヘッダー */}
+      <header className="bg-brand-950 text-white">
+        <div className="max-w-[1400px] mx-auto px-8 py-6 flex items-center gap-4">
+          <img src="./logo.png" alt="ロゴ" className="w-12 h-12 rounded-lg object-cover" />
+          <div>
+            <p className="text-xs tracking-[0.25em] text-brand-300 font-semibold mb-1">
+              YOUTUBE GROWTH PARTNER
+            </p>
+            <h1 className="text-2xl font-bold tracking-wide">
+              費用対効果シミュレーター
+            </h1>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-[1400px] mx-auto px-8 py-10 grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-10">
+        {/* ===== サイドバー：入力 ===== */}
+        <aside>
+          <div className="bg-white rounded-2xl border border-brand-100 shadow-sm p-8 sticky top-8">
+            <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
+              <span className="inline-block w-2 h-6 rounded bg-brand-900"></span>
+              シミュレーション条件
+            </h2>
+            <p className="text-xs text-slate-400 mb-8">
+              数値を動かすと右側の結果が即時に更新されます
+            </p>
+
+            <InputSlider
+              label="運用代行プラン月額費用"
+              unit="円 / 月"
+              value={fee}
+              min={50000}
+              max={2000000}
+              step={1000}
+              onChange={setFee}
+            />
+            <InputSlider
+              label="お客様サービス単価"
+              unit="円"
+              value={price}
+              min={100000}
+              max={3000000}
+              step={10000}
+              onChange={setPrice}
+            />
+            <InputSlider
+              label="商談成約率"
+              unit="%"
+              value={closeRate}
+              min={1}
+              max={100}
+              step={1}
+              onChange={setCloseRate}
+              hint="リストからの商談で成約に至る割合"
+            />
+            <InputSlider
+              label="公式LINEリストイン転換率"
+              unit="%"
+              value={listRate}
+              min={0.05}
+              max={5}
+              step={0.05}
+              onChange={setListRate}
+              hint="再生数のうち公式LINE登録に至る割合"
+            />
+            <InputSlider
+              label="月間投稿本数"
+              unit="本 / 月"
+              value={posts}
+              min={1}
+              max={20}
+              step={1}
+              onChange={setPosts}
+            />
+            <InputSlider
+              label="契約期間"
+              unit="ヶ月"
+              value={termMonths}
+              min={3}
+              max={24}
+              step={1}
+              onChange={setTermMonths}
+              hint="ロードマップ表はこの期間で表示されます"
+            />
+          </div>
+        </aside>
+
+        {/* ===== メイン：ダッシュボード ===== */}
+        <section className="min-w-0">
+          {/* --- セクション1：目標KPIサマリー --- */}
+          <div className="mb-4 flex items-center gap-2">
+            <span className="inline-block w-2 h-6 rounded bg-brand-900"></span>
+            <h2 className="text-lg font-bold">損益分岐ライン（ペイする条件）</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <KpiCard
+              accent
+              label="損益分岐点：必要な月間成約数"
+              value={breakEvenDeals}
+              unit="件 / 月"
+              sub={`月額費用 ${fmtInt(fee)}円 ÷ サービス単価 ${fmtInt(price)}円`}
+            />
+            <KpiCard
+              label="必要な月間リスト数"
+              value={requiredLists}
+              unit="件 / 月"
+              sub={`成約率 ${closeRate}% で ${fmt1(breakEvenDeals)}件 成約するために必要`}
+            />
+            <KpiCard
+              label="必要月間再生回数"
+              value={targetViews}
+              unit="回 / 月"
+              sub={`転換率 ${listRate}% で ${fmt1(requiredLists)}件 リスト獲得するために必要`}
+            />
+          </div>
+
+          {/* --- セクション2：成長ロードマップ --- */}
+          <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-6 rounded bg-brand-900"></span>
+              <h2 className="text-lg font-bold">契約期間（{termMonths}ヶ月）の成長ロードマップ</h2>
+            </div>
+            {breakEvenMonth && (
+              <p className="text-sm font-semibold text-brand-700 bg-brand-100 rounded-full px-4 py-1.5">
+                {breakEvenMonth.m}ヶ月目 に損益分岐ラインを突破する見込み
+              </p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[17px]">
+                <thead>
+                  <tr className="bg-brand-900 text-white">
+                    <ThInfo align="left" tip="契約開始からの経過月数です。">
+                      経過月
+                    </ThInfo>
+                    <ThInfo tip="その月に新規に投稿する動画の本数です。サイドバーの「月間投稿本数」の値がそのまま入ります。">
+                      当月投稿数
+                    </ThInfo>
+                    <ThInfo
+                      sub="資産となる動画本数"
+                      tip="契約開始からその月までに公開した動画の累計本数です。動画は投稿後も再生され続けるため、積み上がるほど将来の再生数の土台（資産）になります。"
+                    >
+                      累計ストック
+                    </ThInfo>
+                    <ThInfo tip="累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「必要月間再生回数」へちょうど到達するよう計算しています。">
+                      予測 月間再生数
+                    </ThInfo>
+                    <ThInfo tip="予測月間再生数 ×（公式LINEリストイン転換率 ÷ 100）で算出した、公式LINEへの登録数の予測値です。">
+                      予測 リストイン数
+                    </ThInfo>
+                    <ThInfo tip="予測リストイン数 ×（商談成約率 ÷ 100）で算出した、バックエンド商材の成約数の予測値です。">
+                      予測 成約数
+                    </ThInfo>
+                    <ThInfo sub="成約数 × サービス単価" tip="予測成約数 × お客様サービス単価で算出した、その月の予測売上です。">
+                      予測 売上
+                    </ThInfo>
+                  </tr>
+                </thead>
+                <tbody>
+                  {months.map((r) => {
+                    const cleared = breakEvenDeals > 0 && r.deals >= breakEvenDeals;
+                    return (
+                      <tr
+                        key={r.m}
+                        className={
+                          "border-t border-brand-100 transition-colors " +
+                          (cleared ? "bg-brand-50/80" : "bg-white hover:bg-slate-50")
+                        }
+                      >
+                        <td className="px-5 py-4 text-lg font-bold whitespace-nowrap">
+                          {r.m}ヶ月目
+                          {cleared && (
+                            <span className="ml-2 inline-block text-[11px] font-bold text-white bg-brand-700 rounded-full px-2.5 py-0.5 align-middle">
+                              黒字圏
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg tabular-nums">{r.posts}本</td>
+                        <td className="px-5 py-4 text-right text-lg font-semibold tabular-nums text-brand-700">
+                          {r.stock}本
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg">
+                          <AnimatedCell value={r.views} /> 回
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg">
+                          <AnimatedCell value={r.lists} decimals={1} /> 件
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg">
+                          <AnimatedCell value={r.deals} decimals={2} highlight={cleared} /> 件
+                        </td>
+                        <td className="px-5 py-4 text-right text-lg">
+                          <span className={cleared ? "font-bold text-brand-900" : ""}>
+                            <AnimatedCell value={r.revenue} /> 円
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-brand-100">
+              <p className="text-xs text-slate-400 leading-relaxed">
+                ※ 予測再生数は「目標月間再生数 ×（累計ストック本数 ÷ 契約期間の総投稿本数）の1.5乗」で算出。
+                動画ストックの積み上げに伴い、伸び幅が徐々に大きくなる複利型の成長モデルです。
+                実際の数値を保証するものではありません。
+              </p>
+            </div>
+          </div>
+
+          {/* --- ストックの示唆 --- */}
+          <div className="mt-8 bg-brand-900 rounded-2xl p-8 text-white flex flex-col md:flex-row md:items-center gap-6">
+            <div className="flex-1">
+              <p className="text-lg leading-relaxed font-medium">
+                {termMonths}ヶ月間で積み上がる <span className="text-[32px] font-bold tabular-nums">{posts * termMonths}</span> 本の動画は、
+                契約終了後も再生され続ける営業資産です。
+                月間 <span className="font-bold tabular-nums">{fmtInt(targetViews)}</span> 回再生を超えた分は、
+                そのまま利益の上積みになります。
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<RoiSimulator />);
+</script>
+</body>
+</html>
