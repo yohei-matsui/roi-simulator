@@ -195,12 +195,9 @@ function ThInfo({ children, tip, align = "right", sub }) {
 }
 
 /* ---------- KPIカード ---------- */
-function KpiCard({ label, value, unit, sub, accent, manual, onToggleManual, manualValue, onManualChange }) {
+function KpiCard({ label, value, unit, sub, accent }) {
   const animated = useAnimatedNumber(value);
   const isDecimal = value < 100;
-  const [editing, setEditing] = useState(null);
-  const formattedManual =
-    manualValue !== undefined ? manualValue.toLocaleString("ja-JP", { maximumFractionDigits: 2 }) : "";
   return (
     <div
       className={
@@ -210,56 +207,67 @@ function KpiCard({ label, value, unit, sub, accent, manual, onToggleManual, manu
           : "bg-white border-brand-100 text-brand-900")
       }
     >
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <p className={"text-sm font-semibold tracking-wide " + (accent ? "text-brand-200" : "text-slate-500")}>
-          {label}
-        </p>
-        {onToggleManual && (
-          <button
-            type="button"
-            onClick={onToggleManual}
-            className={
-              "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors " +
-              (manual ? "bg-brand-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200")
-            }
-          >
-            {manual ? "手動設定" : "自動計算"}
-          </button>
-        )}
-      </div>
-      {manual ? (
-        <div className="flex items-baseline gap-2">
-          <input
-            type="text"
-            inputMode="decimal"
-            className="w-36 rounded-lg border border-brand-200 bg-white px-2 py-1 text-[40px] leading-none font-bold tabular-nums text-brand-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
-            value={editing !== null ? editing : formattedManual}
-            onFocus={() => setEditing(String(manualValue))}
-            onBlur={() => setEditing(null)}
-            onChange={(e) => {
-              setEditing(e.target.value);
-              const v = parseFloat(e.target.value.replace(/,/g, ""));
-              if (!isNaN(v)) onManualChange(v);
-            }}
-          />
-          <span className="text-xl font-semibold whitespace-nowrap text-slate-500">{unit}</span>
-        </div>
-      ) : (
-        <p className="num-transition flex items-baseline gap-1.5">
-          <span className="text-[56px] leading-none font-bold tabular-nums">
-            {isDecimal ? fmt1(animated) : fmtInt(animated)}
-          </span>
-          <span className={"text-xl font-semibold whitespace-nowrap " + (accent ? "text-brand-200" : "text-slate-500")}>
-            {unit}
-          </span>
-        </p>
-      )}
+      <p className={"text-sm font-semibold tracking-wide mb-3 " + (accent ? "text-brand-200" : "text-slate-500")}>
+        {label}
+      </p>
+      <p className="num-transition flex items-baseline gap-1.5">
+        <span className="text-[56px] leading-none font-bold tabular-nums">
+          {isDecimal ? fmt1(animated) : fmtInt(animated)}
+        </span>
+        <span className={"text-xl font-semibold whitespace-nowrap " + (accent ? "text-brand-200" : "text-slate-500")}>
+          {unit}
+        </span>
+      </p>
       {sub && (
         <p className={"mt-3 text-sm leading-relaxed " + (accent ? "text-brand-300" : "text-slate-400")}>
           {sub}
         </p>
       )}
     </div>
+  );
+}
+
+/* ---------- トグルスイッチ ---------- */
+function ToggleSwitch({ checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-200 " +
+        (checked ? "bg-brand-900" : "bg-slate-300")
+      }
+    >
+      <span
+        className={
+          "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform " +
+          (checked ? "translate-x-6" : "translate-x-1")
+        }
+      />
+    </button>
+  );
+}
+
+/* ---------- 個別設定モード用の数値入力 ---------- */
+function ManualViewsInput({ value, onChange }) {
+  const [editing, setEditing] = useState(null);
+  const formatted = value.toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="w-28 rounded-lg border border-brand-200 bg-white px-2 py-1.5 text-right text-lg font-bold tabular-nums text-brand-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
+      value={editing !== null ? editing : formatted}
+      onFocus={() => setEditing(String(value))}
+      onBlur={() => setEditing(null)}
+      onChange={(e) => {
+        setEditing(e.target.value);
+        const v = parseFloat(e.target.value.replace(/,/g, ""));
+        if (!isNaN(v)) onChange(v);
+      }}
+    />
   );
 }
 
@@ -430,22 +438,31 @@ function RoiSimulator() {
               label="必要月間再生回数"
               value={targetViews}
               unit="回 / 月"
-              manual={viewsManual}
-              onToggleManual={handleToggleViewsManual}
-              manualValue={manualViews}
-              onManualChange={setManualViews}
               sub={
                 viewsManual
-                  ? "手動で設定した目標再生数です。ロードマップの計算に反映されます。"
+                  ? "個別設定モードで入力した値です"
                   : `転換率 ${listRate}% で ${fmt1(requiredLists)}件 リスト獲得するために必要`
               }
             />
           </div>
 
           {/* --- セクション2：成長ロードマップ --- */}
-          <div className="mb-4 flex items-center gap-2">
-            <span className="inline-block w-2 h-6 rounded bg-brand-900"></span>
-            <h2 className="text-lg font-bold">契約期間（{termMonths}ヶ月）の成長ロードマップ</h2>
+          <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-6 rounded bg-brand-900"></span>
+              <h2 className="text-lg font-bold">契約期間（{termMonths}ヶ月）の成長ロードマップ</h2>
+            </div>
+            <div className="flex items-center gap-3 rounded-full border border-brand-100 bg-white px-4 py-2 shadow-sm">
+              <span className="text-sm font-semibold text-brand-900 whitespace-nowrap">個別設定モード</span>
+              <ToggleSwitch checked={viewsManual} onChange={handleToggleViewsManual} />
+              {viewsManual && (
+                <div className="flex items-center gap-1.5 border-l border-brand-100 pl-3">
+                  <span className="text-xs text-slate-500 whitespace-nowrap">必要月間再生回数</span>
+                  <ManualViewsInput value={manualViews} onChange={setManualViews} />
+                  <span className="text-xs text-slate-500 whitespace-nowrap">回 / 月</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-brand-100 shadow-sm overflow-hidden">
