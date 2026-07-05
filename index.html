@@ -325,6 +325,23 @@ function RoiSimulator() {
     setGoalValue(autoValueForMetric[metric]);
   };
 
+  // 選択中の指標に複利成長カーブ（指数）を適用し、他の指標を転換率・成約率で
+  // 逆算/順算する。1.3乗〜1.5乗の間で結果が変わりうるため、月間再生数は
+  // その幅を「◯〜◯回」の範囲として表示する（1.3乗側が上限、1.5乗側が下限）。
+  const computeFunnelViews = (curve) => {
+    if (goalMode && goalMetric === "lists") {
+      const lists = goalValue * curve;
+      return listRate > 0 ? lists / (listRate / 100) : 0;
+    }
+    if (goalMode && goalMetric === "deals") {
+      const deals = goalValue * curve;
+      const lists = closeRate > 0 ? deals / (closeRate / 100) : 0;
+      return listRate > 0 ? lists / (listRate / 100) : 0;
+    }
+    const target = goalMode ? goalValue : autoTargetViews;
+    return target * curve;
+  };
+
   /* --- 契約期間ロードマップ ---
      目標設定モードOFF、または対象が「月間再生回数」の場合：
      予測再生数 = 目標再生数 × (累計ストック / (投稿数×目標達成月))^1.3 という
@@ -356,9 +373,12 @@ function RoiSimulator() {
       deals = lists * (closeRate / 100);
     }
 
+    const viewsHigh = views; // 1.3乗（伸びが早い側）
+    const viewsLow = computeFunnelViews(Math.pow(ratio, 1.5)); // 1.5乗（伸びが遅い側）
+
     const revenue = deals * price;
     const profit = revenue - fee;
-    return { m, posts, stock, views, lists, deals, revenue, profit };
+    return { m, posts, stock, views, viewsLow, viewsHigh, lists, deals, revenue, profit };
   });
 
   return (
@@ -542,10 +562,10 @@ function RoiSimulator() {
                     <ThInfo
                       tip={
                         goalMode && goalMetric === "views"
-                          ? `目標設定モードで入力した目標月間再生回数へ、${effectiveGoalMonth}ヶ月後に複利的に到達すると仮定した、その月の目標月間再生数です。`
+                          ? `目標設定モードで入力した目標月間再生回数へ、${effectiveGoalMonth}ヶ月後に複利的に到達すると仮定した、その月の目標月間再生数です。成長カーブの指数を1.3〜1.5乗の間で振れる想定とし、幅のある範囲で表示しています。`
                           : goalMode
-                          ? "選択中の目標指標から逆算した、その月の月間再生数です。"
-                          : "累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「必要月間再生回数」へちょうど到達するよう計算しています。"
+                          ? "選択中の目標指標から逆算した、その月の月間再生数です。成長カーブの指数を1.3〜1.5乗の間で振れる想定とし、幅のある範囲で表示しています。"
+                          : "累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「必要月間再生回数」へちょうど到達するよう計算しています。成長カーブの指数を1.3〜1.5乗の間で振れる想定とし、幅のある範囲で表示しています。"
                       }
                     >
                       {goalMode && goalMetric === "views" ? "目標 月間再生数" : "予測 月間再生数"}
@@ -594,7 +614,15 @@ function RoiSimulator() {
                           {r.stock}本
                         </td>
                         <td className="px-5 py-4 text-right text-lg">
-                          <AnimatedCell value={r.views} /> 回
+                          {Math.round(r.viewsLow) === Math.round(r.viewsHigh) ? (
+                            <React.Fragment>
+                              <AnimatedCell value={r.viewsHigh} /> 回
+                            </React.Fragment>
+                          ) : (
+                            <React.Fragment>
+                              <AnimatedCell value={r.viewsLow} />〜<AnimatedCell value={r.viewsHigh} /> 回
+                            </React.Fragment>
+                          )}
                         </td>
                         <td className="px-5 py-4 text-right text-lg">
                           <AnimatedCell value={r.lists} decimals={1} /> 件
