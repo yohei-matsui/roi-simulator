@@ -327,7 +327,7 @@ function RoiSimulator() {
 
   /* --- 契約期間ロードマップ ---
      目標設定モードOFF、または対象が「月間再生回数」の場合：
-     予測再生数 = 目標再生数 × (累計ストック / (投稿数×目標達成月))^1.5 という
+     予測再生数 = 目標再生数 × (累計ストック / (投稿数×目標達成月))^1.3 という
      複利成長カーブを月間再生数に適用し、そこからリストイン数・成約数を
      順算する。対象が「リストイン数」「成約数」の場合は、その指標に
      複利成長カーブを適用し、他の指標は転換率・成約率で逆算/順算する。
@@ -338,7 +338,7 @@ function RoiSimulator() {
     const stock = posts * m;
     const curveMonths = goalMode ? effectiveGoalMonth : termMonths;
     const ratio = posts > 0 ? stock / (posts * curveMonths) : 0;
-    const curve = Math.pow(ratio, 1.5);
+    const curve = Math.pow(ratio, 1.3);
 
     let views, lists, deals;
     if (goalMode && goalMetric === "lists") {
@@ -610,7 +610,7 @@ function RoiSimulator() {
             </div>
             <div className="px-6 py-4 bg-slate-50 border-t border-brand-100">
               <p className="text-xs text-slate-400 leading-relaxed">
-                ※ 予測再生数は「目標月間再生数 ×（累計ストック本数 ÷ 契約期間の総投稿本数）の1.5乗」で算出。
+                ※ 予測再生数は「目標月間再生数 ×（累計ストック本数 ÷ 契約期間の総投稿本数）の1.3乗」で算出。
                 動画ストックの積み上げに伴い、伸び幅が徐々に大きくなる複利型の成長モデルです。
                 実際の数値を保証するものではありません。
               </p>
