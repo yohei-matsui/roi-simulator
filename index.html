@@ -297,6 +297,7 @@ function RoiSimulator() {
   const [goalMode, setGoalMode] = useState(false);   // 目標設定モードのON/OFF
   const [goalMetric, setGoalMetric] = useState("views"); // "views" | "lists" | "deals"
   const [goalValue, setGoalValue] = useState(1000);  // 選択中の指標に対する目標値
+  const [goalMonth, setGoalMonth] = useState(6);     // 目標を達成する「何ヶ月後」
 
   /* --- 計算ロジック --- */
   const breakEvenDeals = price > 0 ? fee / price : 0;                       // 必要月間成約数
@@ -306,9 +307,15 @@ function RoiSimulator() {
   // 選択中の指標に応じた「自動計算した場合の値」（切り替え時の初期値引き継ぎに使う）
   const autoValueForMetric = { views: autoTargetViews, lists: requiredLists, deals: breakEvenDeals };
 
-  // 自動→手動へ切り替える瞬間は、直前の自動計算値を初期値として引き継ぐ
+  // 契約期間を超える指定は無効なので契約月数でクランプする
+  const effectiveGoalMonth = Math.min(Math.max(1, Math.round(goalMonth) || 1), termMonths);
+
+  // 自動→手動へ切り替える瞬間は、直前の自動計算値・契約最終月を初期値として引き継ぐ
   const handleToggleGoalMode = () => {
-    if (!goalMode) setGoalValue(autoValueForMetric[goalMetric]);
+    if (!goalMode) {
+      setGoalValue(autoValueForMetric[goalMetric]);
+      setGoalMonth(termMonths);
+    }
     setGoalMode((v) => !v);
   };
 
@@ -320,14 +327,17 @@ function RoiSimulator() {
 
   /* --- 契約期間ロードマップ ---
      目標設定モードOFF、または対象が「月間再生回数」の場合：
-     予測再生数 = 目標再生数 × (累計ストック / (投稿数×契約月数))^1.5 という
+     予測再生数 = 目標再生数 × (累計ストック / (投稿数×目標達成月))^1.5 という
      複利成長カーブを月間再生数に適用し、そこからリストイン数・成約数を
      順算する。対象が「リストイン数」「成約数」の場合は、その指標に
-     複利成長カーブを適用し、他の指標は転換率・成約率で逆算/順算する。 */
+     複利成長カーブを適用し、他の指標は転換率・成約率で逆算/順算する。
+     目標達成月は契約期間内で自由に指定でき、それより後の月は同じ
+     カーブの延長線上でさらに伸び続ける想定にする。 */
   const months = Array.from({ length: termMonths }, (_, i) => {
     const m = i + 1;
     const stock = posts * m;
-    const ratio = posts > 0 ? stock / (posts * termMonths) : 0;
+    const curveMonths = goalMode ? effectiveGoalMonth : termMonths;
+    const ratio = posts > 0 ? stock / (posts * curveMonths) : 0;
     const curve = Math.pow(ratio, 1.5);
 
     let views, lists, deals;
@@ -493,6 +503,20 @@ function RoiSimulator() {
                   <span className="text-xs text-slate-500 whitespace-nowrap">
                     {goalMetric === "views" ? "回 / 月" : "件 / 月"}
                   </span>
+                  <div className="flex items-center gap-1 border-l border-brand-100 pl-3">
+                    <input
+                      type="number"
+                      min={1}
+                      max={termMonths}
+                      value={goalMonth}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        setGoalMonth(isNaN(v) ? 1 : v);
+                      }}
+                      className="w-14 rounded-lg border border-brand-200 bg-white px-2 py-1.5 text-right text-sm font-bold tabular-nums text-brand-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                    />
+                    <span className="text-xs text-slate-500 whitespace-nowrap">ヶ月後に達成</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -518,7 +542,7 @@ function RoiSimulator() {
                     <ThInfo
                       tip={
                         goalMode && goalMetric === "views"
-                          ? "目標設定モードで入力した目標月間再生回数へ、累計ストック本数の伸びに応じて複利的に到達すると仮定した、その月の目標月間再生数です。"
+                          ? `目標設定モードで入力した目標月間再生回数へ、${effectiveGoalMonth}ヶ月後に複利的に到達すると仮定した、その月の目標月間再生数です。`
                           : goalMode
                           ? "選択中の目標指標から逆算した、その月の月間再生数です。"
                           : "累計ストック本数の伸びに応じて複利的に増加すると仮定した、その月の予測月間再生数です。契約最終月にKPIサマリーの「必要月間再生回数」へちょうど到達するよう計算しています。"
@@ -529,7 +553,7 @@ function RoiSimulator() {
                     <ThInfo
                       tip={
                         goalMode && goalMetric === "lists"
-                          ? "目標設定モードで入力した目標リストイン数へ、累計ストック本数の伸びに応じて複利的に到達すると仮定した、その月のリストイン数です。"
+                          ? `目標設定モードで入力した目標リストイン数へ、${effectiveGoalMonth}ヶ月後に複利的に到達すると仮定した、その月のリストイン数です。`
                           : "予測月間再生数 ×（公式LINEリストイン転換率 ÷ 100）で算出した、公式LINEへの登録数の予測値です。"
                       }
                     >
@@ -538,7 +562,7 @@ function RoiSimulator() {
                     <ThInfo
                       tip={
                         goalMode && goalMetric === "deals"
-                          ? "目標設定モードで入力した目標成約数へ、累計ストック本数の伸びに応じて複利的に到達すると仮定した、その月の成約数です。"
+                          ? `目標設定モードで入力した目標成約数へ、${effectiveGoalMonth}ヶ月後に複利的に到達すると仮定した、その月の成約数です。`
                           : "予測リストイン数 ×（商談成約率 ÷ 100）で算出した、バックエンド商材の成約数の予測値です。"
                       }
                     >
